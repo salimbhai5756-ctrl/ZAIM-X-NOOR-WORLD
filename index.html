@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ZAIM ❤️ JANNAWWH — City</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101827;color:#fff;font-family:Arial,sans-serif;touch-action:none}
+#game{position:fixed;inset:0}canvas{display:block}
+#top{position:fixed;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;pointer-events:none}
+.panel{background:#101827dd;border:1px solid #ffffff30;border-radius:12px;padding:9px 11px;backdrop-filter:blur(8px);pointer-events:auto}
+#brand{font-weight:800;font-size:15px}#status{font-size:12px;color:#b8f7d1;margin-top:4px}
+#roomBox{display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:65%;justify-content:flex-end}
+button,input{border:0;border-radius:9px;padding:10px;font-weight:700;font-size:13px}
+button{background:#ff4f86;color:white}button.secondary{background:#34445d}input{width:92px;background:#fff;color:#111}
+#help{position:fixed;left:10px;bottom:12px;background:#101827c9;padding:9px 11px;border-radius:10px;font-size:11px;color:#e3e9f5;max-width:55%;pointer-events:none}
+#controls{position:fixed;right:12px;bottom:14px;display:flex;gap:9px;align-items:flex-end}
+.ctrl{width:58px;height:58px;border-radius:50%;background:#17243bdc;border:2px solid #ffffff80;color:white;font-size:12px}
+#stick{position:fixed;left:16px;bottom:20px;width:116px;height:116px;border-radius:50%;background:#14233bb0;border:2px solid #ffffff55;display:none}
+#nub{position:absolute;left:35px;top:35px;width:42px;height:42px;border-radius:50%;background:#ffffffa8}
+#hint{position:fixed;top:72px;left:10px;font-size:11px;color:#fff;background:#101827aa;padding:6px 8px;border-radius:8px}
+@media (pointer:coarse){#stick{display:block}#help{bottom:145px}}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="top">
+  <div class="panel"><div id="brand">ZAIM ❤️ JANNAWWH CITY</div><div id="status">Connecting to game server…</div></div>
+  <div class="panel" id="roomBox">
+    <button id="create">CREATE ROOM</button>
+    <input id="code" maxlength="8" placeholder="ROOM CODE">
+    <button id="join" class="secondary">JOIN</button>
+  </div>
+</div>
+<div id="hint">Explore the city • Meet your partner online</div>
+<div id="help">Move: WASD / arrow keys • Jump: Space • Camera: C • Drive: E</div>
+<div id="stick"><div id="nub"></div></div>
+<div id="controls">
+  <button class="ctrl" id="cam">CAM</button>
+  <button class="ctrl" id="jump">JUMP</button>
+  <button class="ctrl" id="drive">DRIVE</button>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(() => {
+  const statusEl=document.getElementById('status'), codeEl=document.getElementById('code');
+  const socket=io({transports:['websocket','polling']});
+  let room='', peer=null, peerPresent=false, thirdPerson=true, driving=false, speed=0, yaw=0;
+  socket.on('connect',()=>statusEl.textContent='Server connected • Create or join a room');
+  socket.on('connect_error',()=>statusEl.textContent='Connecting… check internet');
+  socket.on('room-joined',d=>{room=d.room;statusEl.textContent='Room '+room+' • '+d.players+'/2 players';});
+  socket.on('peer-joined',d=>{peerPresent=true;statusEl.textContent='Room '+room+' • Partner connected ❤️';});
+  socket.on('peer-left',()=>{peerPresent=false;statusEl.textContent='Partner left • waiting…';if(peer)peer.visible=false;});
+  socket.on('room-error',d=>statusEl.textContent=d.message);
+  socket.on('peer-state',s=>{peerPresent=true;if(peer){peer.visible=true;peer.position.set(s.x,s.y,s.z);peer.rotation.y=s.ry;}});
+  function makeRoom(){room=Math.random().toString(36).slice(2,8).toUpperCase();codeEl.value=room;socket.emit('join-room',{room});}
+  document.getElementById('create').onclick=makeRoom;
+  document.getElementById('join').onclick=()=>{const c=codeEl.value.trim().toUpperCase();if(c.length<4){statusEl.textContent='Enter the room code first';return;}socket.emit('join-room',{room:c});};
+  const scene=new THREE.Scene();scene.background=new THREE.Color(0x9bc8e8);scene.fog=new THREE.Fog(0x9bc8e8,65,190);
+  const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,400);
+  const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;document.getElementById('game').appendChild(renderer.domElement);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x56616d,2));
+  const sun=new THREE.DirectionalLight(0xffffff,2.1);sun.position.set(35,65,25);sun.castShadow=true;scene.add(sun);
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(260,260),new THREE.MeshStandardMaterial({color:0x47764c}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+  function box(w,h,d,color,x,y,z){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color}));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;}
+  // city roads and sidewalks
+  for(let i=-5;i<=5;i++){
+    box(260,.08,10,0x303844,0,.05,i*22);
+    box(10,.08,260,0x303844,i*22,.05,0);
+    box(260,.1,1.2,0xb8b7a9,0,.1,i*22-5.6);box(260,.1,1.2,0xb8b7a9,0,.1,i*22+5.6);
+    box(1.2,.1,260,0xb8b7a9,i*22-5.6,.1,0);box(1.2,.1,260,0xb8b7a9,i*22+5.6,.1,0);
+  }
+  // buildings in city blocks
+  const colors=[0x8c9aa8,0xc2a58b,0x718c9d,0xaaa7a0,0x5d7187,0xb6b9b4,0x967f75];
+  for(let gx=-4;gx<=4;gx++)for(let gz=-4;gz<=4;gz++){
+    if(Math.abs(gx)<1&&Math.abs(gz)<1)continue;
+    const x=gx*22+(Math.random()-.5)*4,z=gz*22+(Math.random()-.5)*4;
+    const w=7+Math.random()*5,d=7+Math.random()*5,h=8+Math.random()*25;
+    box(w,h,d,colors[Math.floor(Math.random()*colors.length)],x,h/2,z);
+    for(let y=3;y<h-1;y+=3)for(let wx=-w/2+1;wx<w/2;wx+=2.4){
+      const win=new THREE.Mesh(new THREE.BoxGeometry(1,.9,.08),new THREE.MeshStandardMaterial({color:0x9bd6e8,emissive:0x163344}));
+      win.position.set(x+wx,y,z+d/2+.05);scene.add(win);
+    }
+  }
+  function person(color){const g=new THREE.Group();const body=new THREE.Mesh(new THREE.CapsuleGeometry(.48,.85,4,8),new THREE.MeshStandardMaterial({color}));body.position.y=1.05;body.castShadow=true;g.add(body);const head=new THREE.Mesh(new THREE.SphereGeometry(.32,12,10),new THREE.MeshStandardMaterial({color:0xf0c5a3}));head.position.y=1.9;g.add(head);scene.add(g);return g;}
+  const me=person(0x2878ff);me.position.set(0,0,0);peer=person(0xff4f86);peer.position.set(3,0,0);peer.visible=false;
+  const car=new THREE.Group();const base=new THREE.Mesh(new THREE.BoxGeometry(2.5,.8,4.4),new THREE.MeshStandardMaterial({color:0xe63b43,metalness:.25,roughness:.35}));base.position.y=.75;car.add(base);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(1.8,.75,2),new THREE.MeshStandardMaterial({color:0x9ed5e8,metalness:.1,roughness:.2}));roof.position.set(0,1.45,-.2);car.add(roof);
+  for(const x of [-1.25,1.25])for(const z of [-1.4,1.4]){const wh=new THREE.Mesh(new THREE.CylinderGeometry(.42,.42,.22,14),new THREE.MeshStandardMaterial({color:0x16191e}));wh.rotation.z=Math.PI/2;wh.position.set(x,.48,z);car.add(wh);}
+  car.position.set(5,0,5);scene.add(car);
+  const keys={};addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key.toLowerCase()==='c')toggleCam();if(e.key.toLowerCase()==='e')toggleDrive();});
+  addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+  function toggleCam(){thirdPerson=!thirdPerson;}function toggleDrive(){driving=!driving;statusEl.textContent=room?(driving?'Driving • Room '+room:'Walking • Room '+room):'Create or join a room first';}
+  document.getElementById('cam').onclick=toggleCam;document.getElementById('drive').onclick=toggleDrive;
+  document.getElementById('jump').onclick=()=>{if(!driving)jumpV=.18;};
+  let jumpV=0,stickX=0,stickY=0;
+  const stick=document.getElementById('stick'),nub=document.getElementById('nub');
+  function stickMove(e){const r=stick.getBoundingClientRect(),t=e.touches?e.touches[0]:e;let dx=t.clientX-(r.left+r.width/2),dy=t.clientY-(r.top+r.height/2),len=Math.hypot(dx,dy),max=38;if(len>max){dx=dx/len*max;dy=dy/len*max;}stickX=dx/max;stickY=dy/max;nub.style.transform=`translate(${dx}px,${dy}px)`;}
+  stick.addEventListener('touchstart',e=>{e.preventDefault();stickMove(e)},{passive:false});stick.addEventListener('touchmove',e=>{e.preventDefault();stickMove(e)},{passive:false});stick.addEventListener('touchend',()=>{stickX=stickY=0;nub.style.transform='translate(0,0)'});
+  let lastSend=0;
+  function animate(t){requestAnimationFrame(animate);const dt=Math.min(.04,(t-(animate.last||t))/1000);animate.last=t;
+    let forward=(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0)-stickY;
+    let side=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0)+stickX;
+    if(driving){speed+=(forward*.12-speed*.04);speed=Math.max(-.22,Math.min(.5,speed));car.rotation.y-=side*.035;car.position.x+=Math.sin(car.rotation.y)*speed;car.position.z+=Math.cos(car.rotation.y)*speed;me.position.copy(car.position);me.rotation.y=car.rotation.y;}
+    else{const len=Math.hypot(forward,side);if(len>.05){const fx=side/Math.max(1,len),fz=forward/Math.max(1,len);me.position.x+=fx*.13;me.position.z-=fz*.13;me.rotation.y=Math.atan2(fx,fz);}if(jumpV){me.position.y+=jumpV;jumpV-=.012;if(me.position.y<0)me.position.y=0,jumpV=0;}}
+    me.position.x=Math.max(-125,Math.min(125,me.position.x));me.position.z=Math.max(-125,Math.min(125,me.position.z));
+    const target=driving?car.position:me.position;
+    const desired=new THREE.Vector3(target.x+(thirdPerson?Math.sin(me.rotation.y)*-8:0),target.y+(thirdPerson?5:2.1),target.z+(thirdPerson?Math.cos(me.rotation.y)*-8:0));
+    camera.position.lerp(desired,.12);camera.lookAt(target.x,target.y+1.2,target.z);
+    if(room&&socket.connected&&t-lastSend>70){lastSend=t;socket.emit('player-state',{room,x:peer?me.position.x:0,y:me.position.y,z:me.position.z,ry:me.rotation.y,driving,cx:camera.position.x,cy:camera.position.y,cz:camera.position.z});}
+    renderer.render(scene,camera);
+  }requestAnimationFrame(animate);
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+})();
+</script>
+</body>
+</html>
