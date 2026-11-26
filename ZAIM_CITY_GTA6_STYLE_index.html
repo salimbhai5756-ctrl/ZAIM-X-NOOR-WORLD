@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ZAIM CITY ❤️</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101923;font-family:Arial,sans-serif;color:white}
+#game{position:fixed;inset:0}canvas{display:block}
+#top{position:fixed;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
+.logo{font-weight:900;letter-spacing:1px;text-shadow:0 2px 8px #000;font-size:18px}.sub{font-size:10px;color:#c8eaff;margin-top:3px}
+.pill{pointer-events:auto;background:#101923bb;border:1px solid #ffffff55;border-radius:20px;padding:8px 12px;font-size:12px}
+#hint{position:fixed;top:65px;left:12px;background:#101923aa;padding:8px 10px;border-radius:9px;font-size:11px;color:#e8f5ff}
+#controls{position:fixed;inset:auto 0 15px 0;display:flex;justify-content:space-between;align-items:end;padding:0 18px;pointer-events:none}
+.pad{display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:4px;pointer-events:auto}
+.ctrl{border:1px solid #ffffff70;background:#12283dcc;color:white;border-radius:13px;font-size:19px;font-weight:bold;touch-action:none}
+#up{grid-column:2}#left{grid-column:1;grid-row:2}#down{grid-column:2;grid-row:2}#right{grid-column:3;grid-row:2}
+.actions{display:flex;flex-direction:column;gap:9px;pointer-events:auto;align-items:end}
+.actions button{min-width:92px;padding:12px 10px;font-size:12px}
+#menu{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(340px,90vw);background:#101923ee;border:1px solid #8bbce477;border-radius:18px;padding:18px;box-shadow:0 10px 50px #000a}
+#menu h2{margin:0 0 6px}#menu p{font-size:13px;color:#c5d9e8;line-height:1.45}
+#menu input{width:100%;padding:12px;border-radius:9px;border:1px solid #7895aa;background:#09121b;color:white;margin:5px 0}
+#menu button{width:100%;padding:12px;margin-top:7px;border:0;border-radius:9px;background:#18a6b7;color:#00151b;font-weight:bold}
+#status{font-size:11px;color:#a9e6ef;margin-top:8px}
+.hidden{display:none}
+@media(min-width:800px){#controls{padding:0 35px}.ctrl{width:56px;height:56px}}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="top"><div><div class="logo">ZAIM CITY ❤️</div><div class="sub">MIAMI × LAHORE • OPEN WORLD</div></div><div class="pill" id="mode">ON FOOT</div></div>
+<div id="hint">Explore the city • Tap DRIVE to enter your car</div>
+<div id="controls">
+ <div class="pad">
+  <button class="ctrl" id="up">▲</button><button class="ctrl" id="left">◀</button><button class="ctrl" id="down">▼</button><button class="ctrl" id="right">▶</button>
+ </div>
+ <div class="actions">
+  <button class="ctrl" id="camera">CAMERA</button>
+  <button class="ctrl" id="jump">JUMP</button>
+  <button class="ctrl" id="drive">DRIVE</button>
+ </div>
+</div>
+<div id="menu">
+ <h2>ZAIM CITY ❤️</h2>
+ <p>A new city inspired by Miami and Lahore. Explore the streets, beach and downtown. This is an early playable prototype.</p>
+ <input id="room" maxlength="16" placeholder="Room code (e.g. ZAIM)" value="ZAIM">
+ <button id="play">ENTER CITY</button>
+ <div id="status">Loading 3D city…</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(()=>{
+const root=document.getElementById('game'), status=document.getElementById('status');
+if(!window.THREE){status.textContent='3D library load nahi hui. Internet check karke refresh karein.';return;}
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x91c9e8);scene.fog=new THREE.Fog(0x91c9e8,100,430);
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,1000);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;root.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xc9e8ff,0x485044,2));
+const sun=new THREE.DirectionalLight(0xffedcc,2.2);sun.position.set(-90,150,80);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun);
+const mat=(c,r=.8)=>new THREE.MeshStandardMaterial({color:c,roughness:r});
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(700,700),mat(0x6b9270));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+function box(x,y,z,w,h,d,color){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;}
+function road(x,z,w,d){const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),mat(0x30383e));m.rotation.x=-Math.PI/2;m.position.set(x,.025,z);scene.add(m);for(let i=-Math.floor(d/12);i<=Math.floor(d/12);i++){const line=new THREE.Mesh(new THREE.PlaneGeometry(.22,4),mat(0xf5d66b));line.rotation.x=-Math.PI/2;line.position.set(x,.04,z+i*12);scene.add(line)}}
+road(0,0,18,520);road(-85,0,14,520);road(85,0,14,520);road(0,-85,520,14);road(0,85,520,14);
+const water=new THREE.Mesh(new THREE.PlaneGeometry(230,700),new THREE.MeshStandardMaterial({color:0x168bb3,roughness:.3,metalness:.15}));water.rotation.x=-Math.PI/2;water.position.set(245,.015,0);scene.add(water);
+const sand=new THREE.Mesh(new THREE.PlaneGeometry(35,700),mat(0xe5cf9a));sand.rotation.x=-Math.PI/2;sand.position.set(125,.02,0);scene.add(sand);
+// downtown blocks and Lahore-inspired low-rise market
+for(let x=-145;x<=105;x+=30){for(let z=-145;z<=145;z+=34){if(Math.abs(x)<18||Math.abs(z)<18||Math.abs(x+85)<10||Math.abs(x-85)<10)continue;
+ const h= x>20&&x<100 ? 22+Math.random()*62 : 9+Math.random()*20;
+ const width=13+Math.random()*7, depth=14+Math.random()*7;
+ const colors=[0xc4c8c7,0xb8a58c,0x9aaab1,0xd0b89a,0x8799a2,0xe0d7c8];
+ const b=box(x,h/2,z,width,h,depth,colors[Math.floor(Math.random()*colors.length)]);
+ // windows on front
+ const winmat=new THREE.MeshStandardMaterial({color:0x8bd4e8,emissive:0x183c4a,roughness:.25});
+ for(let yy=3;yy<h-2;yy+=4){for(let xx=-width/2+2;xx<width/2-1;xx+=3){const win=new THREE.Mesh(new THREE.PlaneGeometry(1.35,1.8),winmat);win.position.set(x+xx,yy,z+depth/2+.015);scene.add(win)}}
+ }}
+// landmark hotel by beach
+const hotel=box(165,35,-55,28,70,30,0xf0e5d2);for(let y=8;y<65;y+=7){box(165,y,-39.7,22,1,0x4e9cb2)}
+// palm trees
+function palm(x,z){const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.35,.6,8,7),mat(0x806044));trunk.position.set(x,4,z);trunk.castShadow=true;scene.add(trunk);for(let i=0;i<7;i++){const a=i*Math.PI*2/7;const leaf=new THREE.Mesh(new THREE.ConeGeometry(.65,7,5),mat(0x237b48));leaf.position.set(x+Math.cos(a)*2.2,8.1,z+Math.sin(a)*2.2);leaf.rotation.z=-Math.cos(a)*.8;leaf.rotation.x=Math.sin(a)*.8;scene.add(leaf)}}
+for(let z=-290;z<300;z+=22){palm(112,z);palm(145,z+7);}
+// street lamps
+for(let z=-210;z<220;z+=35){for(const x of [-12,12]){const pole=new THREE.Mesh(new THREE.CylinderGeometry(.12,.16,7,6),mat(0x42484b));pole.position.set(x,3.5,z);scene.add(pole);const bulb=new THREE.Mesh(new THREE.SphereGeometry(.45,8,8),new THREE.MeshBasicMaterial({color:0xffe6a1}));bulb.position.set(x,7.2,z);scene.add(bulb)}}
+// player
+const player=new THREE.Group();scene.add(player);
+const body=new THREE.Mesh(new THREE.CapsuleGeometry(.65,1.1,4,8),mat(0x243f91));body.position.y=1.25;body.castShadow=true;player.add(body);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.42,12,12),mat(0xc58e69));head.position.y=2.35;player.add(head);
+const legs=box(0,.35,0,.75,.7,.45,0x20252d);player.add(legs);
+player.position.set(0,0,8);
+// car
+const car=new THREE.Group();scene.add(car);car.position.set(5,0,2);
+const chassis=new THREE.Mesh(new THREE.BoxGeometry(4.2,1,7),mat(0xc62836,.35));chassis.position.y=1;chassis.castShadow=true;car.add(chassis);
+const cabin=new THREE.Mesh(new THREE.BoxGeometry(3.2,1.2,3.3),mat(0x75a9bb,.25));cabin.position.set(0,2, -.3);car.add(cabin);
+for(const x of [-1.65,1.65])for(const z of [-2.3,2.3]){const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.38,16),mat(0x151719));wheel.rotation.z=Math.PI/2;wheel.position.set(x,.62,z);car.add(wheel)}
+let driving=false,third=true,started=false,velocity=0,turn=0,jumpV=0;
+const keys={};addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function hold(id,key){const el=document.getElementById(id);el.addEventListener('pointerdown',e=>{e.preventDefault();keys[key]=true});['pointerup','pointercancel','pointerleave'].forEach(ev=>el.addEventListener(ev,()=>keys[key]=false))}
+hold('up','w');hold('down','s');hold('left','a');hold('right','d');
+document.getElementById('camera').onclick=()=>{third=!third;};
+document.getElementById('jump').onclick=()=>{if(player.position.y<.05)jumpV=.18};
+document.getElementById('drive').onclick=()=>{driving=!driving;document.getElementById('mode').textContent=driving?'DRIVING':'ON FOOT';if(driving){car.position.copy(player.position);car.position.y=0;car.rotation.y=player.rotation.y;}};
+let socket=null,other=null;
+document.getElementById('play').onclick=()=>{started=true;document.getElementById('menu').classList.add('hidden');status.textContent='City loaded';try{if(window.io){socket=io();socket.emit('joinRoom',document.getElementById('room').value||'ZAIM');socket.on('playerMoved',data=>{if(!other){other=new THREE.Mesh(new THREE.CapsuleGeometry(.65,1.1,4,8),mat(0xe6b52b));other.position.y=1.2;scene.add(other)}other.position.set(data.x,data.y||0,data.z);});}}catch(e){}};
+function animate(){requestAnimationFrame(animate);const forward=(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0),side=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0);
+ const obj=driving?car:player;const speed=driving?.42:.17;
+ if(forward){obj.position.x+=Math.sin(obj.rotation.y)*forward*speed;obj.position.z+=Math.cos(obj.rotation.y)*forward*speed}
+ if(side)obj.rotation.y+=side*(driving?.045:.065);
+ if(!driving){jumpV-=.009;player.position.y=Math.max(0,player.position.y+jumpV);if(player.position.y===0)jumpV=0;}
+ if(driving){player.position.copy(car.position);player.rotation.y=car.rotation.y;}
+ const target=driving?car:player;
+ const dist=third?11:1.2, height=third?6:2.2;
+ const desired=new THREE.Vector3(target.position.x-Math.sin(target.rotation.y)*dist,target.position.y+height,target.position.z-Math.cos(target.rotation.y)*dist);
+ camera.position.lerp(desired,.09);camera.lookAt(target.position.x,target.position.y+(third?1.5:1.8),target.position.z);
+ if(socket&&started&&Math.random()<.18)socket.emit('move',{x:player.position.x,y:player.position.y,z:player.position.z});
+ renderer.render(scene,camera);}
+animate();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+})();
+</script>
+</body></html>
